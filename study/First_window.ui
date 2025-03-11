@@ -1,0 +1,478 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>FirstWindow</class>
+ <widget class="QMainWindow" name="FirstWindow">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>1278</width>
+    <height>960</height>
+   </rect>
+  </property>
+  <property name="minimumSize">
+   <size>
+    <width>160</width>
+    <height>90</height>
+   </size>
+  </property>
+  <property name="sizeIncrement">
+   <size>
+    <width>0</width>
+    <height>0</height>
+   </size>
+  </property>
+  <property name="baseSize">
+   <size>
+    <width>0</width>
+    <height>0</height>
+   </size>
+  </property>
+  <property name="font">
+   <font>
+    <family>Times New Roman</family>
+    <pointsize>10</pointsize>
+   </font>
+  </property>
+  <property name="windowTitle">
+   <string>FirstWindow</string>
+  </property>
+  <widget class="QWidget" name="centralwidget">
+   <layout class="QVBoxLayout" name="verticalLayout_3">
+    <item>
+     <widget class="QStackedWidget" name="stackedWidget">
+      <property name="styleSheet">
+       <string notr="true"/>
+      </property>
+      <property name="currentIndex">
+       <number>1</number>
+      </property>
+      <widget class="QWidget" name="page_1">
+       <layout class="QGridLayout" name="gridLayout_2">
+        <item row="3" column="0" colspan="2">
+         <widget class="QPushButton" name="pushButton_save">
+          <property name="text">
+           <string>save</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="0" rowspan="2" colspan="2">
+         <widget class="QWidget" name="widget" native="true">
+          <property name="styleSheet">
+           <string notr="true">border: 1px solid #000000</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_4">
+           <item>
+            <widget class="QTableWidget" name="tableWidget"/>
+           </item>
+           <item>
+            <widget class="QTableWidget" name="tableWidget_2"/>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QLineEdit" name="filePathLineEdit">
+          <property name="text">
+           <string/>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QPushButton" name="pushButton_upload">
+          <property name="text">
+           <string>upload</string>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </widget>
+      <widget class="QWidget" name="page_2">
+       <layout class="QGridLayout" name="gridLayout_3">
+        <item row="0" column="0">
+         <widget class="QGroupBox" name="groupBox">
+          <property name="title">
+           <string>Imputation of missing values</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout_2">
+           <item>
+            <widget class="QRadioButton" name="radioButton_Low">
+             <property name="text">
+              <string>Low </string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioButton_Mean">
+             <property name="text">
+              <string>Mean </string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioButton_Median">
+             <property name="text">
+              <string>Median </string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioButton_KNN">
+             <property name="text">
+              <string>KNN </string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioButton_RF">
+             <property name="text">
+              <string>RF </string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioButton_BR">
+             <property name="text">
+              <string>BR </string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioButton_SVR">
+             <property name="text">
+              <string>SVR </string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QGroupBox" name="groupBox_2">
+          <property name="title">
+           <string>Normalization</string>
+          </property>
+          <layout class="QVBoxLayout" name="verticalLayout">
+           <item>
+            <widget class="QRadioButton" name="radioNoneButton">
+             <property name="text">
+              <string>None</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioMinMaxButton">
+             <property name="text">
+              <string>Min-Max</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioZScoreButton">
+             <property name="text">
+              <string>Z-Score</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioMeanButton">
+             <property name="text">
+              <string>Mean Norm</string>
+             </property>
+            </widget>
+           </item>
+           <item>
+            <widget class="QRadioButton" name="radioMedianButton">
+             <property name="text">
+              <string>Median Norm</string>
+             </property>
+            </widget>
+           </item>
+          </layout>
+         </widget>
+        </item>
+        <item row="2" column="0">
+         <widget class="QPushButton" name="pushButton_refresh">
+          <property name="text">
+           <string>Refresh</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="1">
+         <widget class="QPushButton" name="pushButton_EditGroup">
+          <property name="text">
+           <string>Edit Groups</string>
+          </property>
+         </widget>
+        </item>
+        <item row="2" column="2">
+         <widget class="QPushButton" name="pushButton_Proceed">
+          <property name="text">
+           <string>Proceed</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1" rowspan="2" colspan="2">
+         <widget class="QTableWidget" name="tableWidget_3"/>
+        </item>
+       </layout>
+      </widget>
+     </widget>
+    </item>
+   </layout>
+  </widget>
+  <widget class="QMenuBar" name="menubar">
+   <property name="geometry">
+    <rect>
+     <x>0</x>
+     <y>0</y>
+     <width>1278</width>
+     <height>21</height>
+    </rect>
+   </property>
+   <widget class="QMenu" name="menuFile">
+    <property name="title">
+     <string>File</string>
+    </property>
+    <addaction name="actionopen"/>
+   </widget>
+   <widget class="QMenu" name="menuHome">
+    <property name="title">
+     <string>Home</string>
+    </property>
+   </widget>
+   <widget class="QMenu" name="menuAnalysis">
+    <property name="title">
+     <string>Analysis</string>
+    </property>
+    <addaction name="action_one_factor"/>
+    <addaction name="action_multifactorial"/>
+    <addaction name="action_biomarker_analysis"/>
+   </widget>
+   <widget class="QMenu" name="menuPage">
+    <property name="title">
+     <string>Page</string>
+    </property>
+    <addaction name="action_analysis"/>
+    <addaction name="action_process"/>
+   </widget>
+   <widget class="QMenu" name="menuHelps">
+    <property name="title">
+     <string>Helps</string>
+    </property>
+    <addaction name="action_read"/>
+   </widget>
+   <addaction name="menuFile"/>
+   <addaction name="menuHome"/>
+   <addaction name="menuAnalysis"/>
+   <addaction name="menuPage"/>
+   <addaction name="menuHelps"/>
+  </widget>
+  <widget class="QStatusBar" name="statusbar"/>
+  <widget class="QToolBar" name="toolBar1">
+   <property name="minimumSize">
+    <size>
+     <width>0</width>
+     <height>0</height>
+    </size>
+   </property>
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <property name="toolButtonStyle">
+    <enum>Qt::ToolButtonTextOnly</enum>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionFold_Change"/>
+   <addaction name="actionT_test"/>
+   <addaction name="actionVolcano_Plot"/>
+   <addaction name="actionANOVA"/>
+   <addaction name="actionCorrelations"/>
+  </widget>
+  <widget class="QToolBar" name="toolBar2">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <property name="toolButtonStyle">
+    <enum>Qt::ToolButtonTextOnly</enum>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionPCA"/>
+   <addaction name="actionPLS"/>
+   <addaction name="actionFactor_Analysis"/>
+   <addaction name="actionDiscriminant_Analysis"/>
+   <addaction name="actionCluster_Analysis"/>
+  </widget>
+  <widget class="QToolBar" name="toolBar3">
+   <property name="windowTitle">
+    <string>toolBar</string>
+   </property>
+   <property name="toolButtonStyle">
+    <enum>Qt::ToolButtonTextOnly</enum>
+   </property>
+   <attribute name="toolBarArea">
+    <enum>TopToolBarArea</enum>
+   </attribute>
+   <attribute name="toolBarBreak">
+    <bool>false</bool>
+   </attribute>
+   <addaction name="actionClassical_univariate_ROC_curve_analyses"/>
+   <addaction name="actionMultivariate_ROC_curve_based_exploratory_analysis_Explorer"/>
+  </widget>
+  <action name="actionopen">
+   <property name="text">
+    <string>open</string>
+   </property>
+  </action>
+  <action name="action_one_factor">
+   <property name="text">
+    <string>one factor</string>
+   </property>
+  </action>
+  <action name="actionFold_Change">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/analysis.png</normaloff>../../Pictures/学习/analysis.png</iconset>
+   </property>
+   <property name="text">
+    <string>Fold Change</string>
+   </property>
+  </action>
+  <action name="actionT_test">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/icons8-analysis-80.png</normaloff>../../Pictures/学习/icons8-analysis-80.png</iconset>
+   </property>
+   <property name="text">
+    <string>T-Test</string>
+   </property>
+  </action>
+  <action name="actionVolcano_Plot">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/analysis.png</normaloff>../../Pictures/学习/analysis.png</iconset>
+   </property>
+   <property name="text">
+    <string>Volcano Plot</string>
+   </property>
+  </action>
+  <action name="actionANOVA">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/icons8-analysis-100.png</normaloff>../../Pictures/学习/icons8-analysis-100.png</iconset>
+   </property>
+   <property name="text">
+    <string>ANOVA</string>
+   </property>
+  </action>
+  <action name="actionCorrelations">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/data.png</normaloff>../../Pictures/学习/data.png</iconset>
+   </property>
+   <property name="text">
+    <string>Correlations</string>
+   </property>
+  </action>
+  <action name="actionPCA">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/analysis.png</normaloff>../../Pictures/学习/analysis.png</iconset>
+   </property>
+   <property name="text">
+    <string>PCA</string>
+   </property>
+  </action>
+  <action name="actionPLS">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/business-report.png</normaloff>../../Pictures/学习/business-report.png</iconset>
+   </property>
+   <property name="text">
+    <string>PLS</string>
+   </property>
+  </action>
+  <action name="actionFactor_Analysis">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/find.png</normaloff>../../Pictures/学习/find.png</iconset>
+   </property>
+   <property name="text">
+    <string>Factor Analysis</string>
+   </property>
+  </action>
+  <action name="actionDiscriminant_Analysis">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/analysis.png</normaloff>../../Pictures/学习/analysis.png</iconset>
+   </property>
+   <property name="text">
+    <string>Discriminant Analysis</string>
+   </property>
+  </action>
+  <action name="actionCluster_Analysis">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/icons8-analysis-100.png</normaloff>../../Pictures/学习/icons8-analysis-100.png</iconset>
+   </property>
+   <property name="text">
+    <string>Cluster Analysis</string>
+   </property>
+  </action>
+  <action name="actionClassical_univariate_ROC_curve_analyses">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/icons8-analysis-80.png</normaloff>../../Pictures/学习/icons8-analysis-80.png</iconset>
+   </property>
+   <property name="text">
+    <string>Classical Univariate ROC Curve Analyses</string>
+   </property>
+  </action>
+  <action name="actionMultivariate_ROC_curve_based_exploratory_analysis_Explorer">
+   <property name="icon">
+    <iconset>
+     <normaloff>../../Pictures/学习/find.png</normaloff>../../Pictures/学习/find.png</iconset>
+   </property>
+   <property name="text">
+    <string>Multivariate ROC Curve Based Exploratory Analysis (Explorer)</string>
+   </property>
+  </action>
+  <action name="action_multifactorial">
+   <property name="text">
+    <string>multifactorial</string>
+   </property>
+  </action>
+  <action name="action_biomarker_analysis">
+   <property name="text">
+    <string> biomarker analysis</string>
+   </property>
+  </action>
+  <action name="action_analysis">
+   <property name="text">
+    <string>analysis</string>
+   </property>
+  </action>
+  <action name="action_process">
+   <property name="text">
+    <string>process</string>
+   </property>
+  </action>
+  <action name="action_read">
+   <property name="text">
+    <string>read</string>
+   </property>
+  </action>
+ </widget>
+ <resources/>
+ <connections/>
+</ui>
