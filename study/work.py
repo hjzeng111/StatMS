@@ -11,7 +11,7 @@ from matplotlib import rcParams
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import QThread,pyqtSignal
-from PyQt5.QtWidgets import QMenu, QToolBar, QAction, QProgressDialog, QSplitter, QTableWidget, QDialog, QFileDialog, QMessageBox,QVBoxLayout, QLabel, QListWidget
+from PyQt5.QtWidgets import QMenu, QToolBar, QInputDialog, QAction, QProgressDialog, QSplitter, QTableWidget, QDialog, QFileDialog, QMessageBox,QVBoxLayout, QLabel, QListWidget
 from PyQt5.QtCore import QCoreApplication
 from scipy.stats import ttest_ind, f_oneway, pearsonr
 from sklearn.decomposition import PCA
@@ -466,40 +466,58 @@ class FirstWindow(QtWidgets.QMainWindow):
         self.stored_filled_data = filled_data  # 存储传递的参数
 
     def save_table_data(self):
-        # 弹出文件保存对话框，让用户选择保存路径
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save File", "", "CSV files (*.csv);;Text files (*.txt)")
-        
-        if not file_path:  # 如果用户取消保存操作，直接返回
+        # 弹出选项对话框询问用户保存类型
+        options = ["1st window data", "2nd window data", "All data"]
+        choice, ok = QInputDialog.getItem(self, "Save Option", "Select data to save:", options, 0, False)
+        if not ok:
             return
+        
+        # 弹出文件保存对话框，让用户选择保存路径
+        def save_single_table(table, window_name):
+            file_path, _ = QFileDialog.getSaveFileName(
+                self, 
+                f"保存{window_name}", 
+                "", 
+                "CSV files (*.csv);;Text files (*.txt)"
+            )
+            if not file_path:
+                return False
 
-        # 获取 QTableWidget 中的数据
-        row_count = self.tableWidget.rowCount()
-        column_count = self.tableWidget.columnCount()
+            # 获取表格数据
+            row_count = table.rowCount()
+            column_count = table.columnCount()
+            data = []
+            for row in range(row_count):
+                row_data = []
+                for col in range(column_count):
+                    item = table.item(row, col)
+                    row_data.append(item.text() if item else "")
+                data.append(row_data)
 
-        # 准备一个空的 DataFrame 来存储表格数据
-        data = []
+            # 创建DataFrame并保存
+            try:
+                df = pd.DataFrame(
+                    data,
+                    columns=[table.horizontalHeaderItem(col).text() for col in range(column_count)]
+                )
+                if file_path.endswith('.csv'):
+                    df.to_csv(file_path, index=False)
+                elif file_path.endswith('.txt'):
+                    df.to_csv(file_path, sep='\t', index=False)
+                QMessageBox.information(self, "成功", f"{window_name}保存成功！")
+                return True
+            except Exception as e:
+                QMessageBox.critical(self, "错误", f"保存失败: {str(e)}")
+                return False
 
-        # 迭代 QTableWidget 中的所有单元格，将数据保存到列表   
-        for row in range(row_count):
-            row_data = []
-            for col in range(column_count):
-                item = self.tableWidget.item(row, col)
-                row_data.append(item.text() if item else "")  # 防止空单元格导致错误
-            data.append(row_data)
-
-        # 将数据转换为 DataFrame
-        df = pd.DataFrame(data, columns=[self.tableWidget.horizontalHeaderItem(col).text() for col in range(column_count)])
-
-        # 根据用户选择的文件类型进行保存
-        try:
-            if file_path.endswith('.csv'):
-                df.to_csv(file_path, index=False)  # 保存为 CSV 文件
-            elif file_path.endswith('.txt'):
-                df.to_csv(file_path, sep='\t', index=False)  # 保存为 TXT 文件
-            QMessageBox.information(self, "Success", "File saved successfully!")
-        except Exception as e:
-            QMessageBox.critical(self, "Error", f"An error occurred while saving the file: {str(e)}")
-
+        if choice == "1st window data":
+            save_single_table(self.tableWidget, "1st window data")
+        elif choice == "2nd window data":
+            save_single_table(self.tableWidget_2, "2nd window data")
+        elif choice == "All data":
+            save_single_table(self.tableWidget, "1st window data")
+            save_single_table(self.tableWidget_2, "2nd window data")
+    
     def Group_table_data(self):
         if self.editable_data is None:
             self.editable_data = self.original_data.copy()
@@ -617,6 +635,8 @@ class FirstWindow(QtWidgets.QMainWindow):
                 if isinstance(toolbar, QToolBar):  # 确保是 QToolBar
                     for action in toolbar.actions():  # 遍历工具栏中的所有 QAction
                         action.setEnabled(True)
+
+            self.display_combined_data(self.sample_data, self.stored_filled_data, self.modified_groups)
 
     def display_combined_data(self, sample_data, filled_data, modified_groups):
         """
@@ -911,7 +931,7 @@ class Toolbar:
             self.tableWidget_2.setItem(row, 3, item_mean2)
 
             # Fold Change 结果
-            # 显示所有 fold_change 的平均值
+            
             
             fold_change_mean = fold_changes[-1] if fold_changes else 0
             item_fc = QTableWidgetItem(f"{fold_change_mean:.2f}")
@@ -1412,13 +1432,45 @@ class Toolbar:
             
             # 将PCA结果转为DataFrame并添加标签列
             pca_df = pd.DataFrame(pca_result, columns=[f"PC {i+1}" for i in range(5)])
-            pca_df['Label'] = labels  # 加入标签列，用于分组显示
+            pca_df['Label'] = labels  # 标签列
+            pca_df['Type'] = 'Score'  # 添加标识列：得分矩阵
+            pca_df.index = [f"Sample_{i+1}" for i in range(pca_df.shape[0])]  # 修改行索引
+
+            # 获取载荷矩阵
+            loadings = self.pca.components_.T  # 转置以匹配原始变量
+            loadings_df = pd.DataFrame(loadings, columns=[f"PC {i+1}" for i in range(5)], 
+                                    index=[f"Var {i+1}" for i in range(data.shape[1])])
+            loadings_df['Type'] = 'Loading'  # 添加标识列：载荷矩阵
+            loadings_df['Label'] = 'N/A'     # 载荷矩阵无标签，填充占位符
+
+            # 将得分矩阵和载荷矩阵的数值精确到2位有效数字
+            pca_df = pca_df.round(4)  # 得分矩阵
+            loadings_df = loadings_df.round(4)  # 载荷矩阵
+
+            # 将得分矩阵和载荷矩阵合并为一个表格
+            combined_df = pd.concat([pca_df, loadings_df], axis=0)
+            columns = ['Type', 'Label'] + [f"PC {i+1}" for i in range(5)]  # 将标识列放在前两列
+            combined_df = combined_df[columns]  
+
+            # 将合并后的表格显示在 tableWidget_2 中
+            self.display_table(combined_df)
 
             # 使用Seaborn绘制多维散点矩阵
             self.visualize_pca_pairplot(pca_df)
 
         except ValueError:
             QMessageBox.warning(self.tableWidget, "Error", "Invalid data format. Ensure all data are numeric")
+
+    def display_table(self, df):
+        """将 DataFrame 显示在 tableWidget_2 中"""
+        self.tableWidget_2.setRowCount(df.shape[0])
+        self.tableWidget_2.setColumnCount(df.shape[1])
+        self.tableWidget_2.setHorizontalHeaderLabels(df.columns)
+
+        for i in range(df.shape[0]):
+            for j in range(df.shape[1]):
+                item = QTableWidgetItem(str(df.iat[i, j]))
+                self.tableWidget_2.setItem(i, j, item)
 
     def visualize_pca_pairplot(self, pca_df):
         sns.set(style="whitegrid")
@@ -1431,8 +1483,6 @@ class Toolbar:
             ax = plt.gca()  # 获取当前子图
             pc_index = int(x.name.split()[1]) - 1  # 获取主成分索引
             variance_text = f"PC {pc_index+1}\n{explained_variance[pc_index] * 100:.1f}%"  # 格式化文本
-            ax.set_xticks([])  # 移除 x 轴刻度
-            ax.set_yticks([])  # 移除 y 轴刻度
             ax.text(0.5, 0.5, variance_text, ha="center", va="center", fontsize=14, fontweight="bold")  # 居中显示文本
 
         # 绘制 PairPlot 并替换对角线
@@ -1450,49 +1500,65 @@ class Toolbar:
         QMessageBox.information(self.tableWidget_2, "Success", "PCA multidimensional scatter plot has been generated")
    
     def PLS_cb(self):
-        # 清空 tableWidget2
+        # 清空 tableWidget_2
         self.tableWidget_2.clear()
 
         data = []
-        target = []
-        labels = []  # 用于存储标签
+        labels = []  # 存储标签（分类变量）
         numRows = self.tableWidget.rowCount()
         numCols = self.tableWidget.columnCount()
 
-        if numCols < 3:
+        if numCols < 2:
             QMessageBox.warning(self.tableWidget, "Error", "Insufficient columns to perform PLS analysis")
             return
 
         try:
-            for row in range(numRows): 
+            for row in range(numRows):
                 row_data = []
-                for col in range(2, numCols - 1):  # 从第一列到倒数第二列为自变量
+                for col in range(2, numCols):  
                     row_data.append(float(self.tableWidget.item(row, col).text()))
                 data.append(row_data)
-                # 获取因变量数据（假设在最后一列存放因变量信息）
-                target.append(float(self.tableWidget.item(row, numCols - 1).text()))
-                # 获取标签数据（假设在第二列存放组别信息，0/1表示不同组别）
+                # 获取分类标签
                 labels.append(self.editable_data.iloc[row, 1])
 
             data = np.array(data)
-            target = np.array(target).reshape(-1, 1)  # 目标数据需要是二维数组
-            labels = np.array(labels)
+            labels = np.array(labels).reshape(-1, 1)  # PLS需要二维标签
 
             # 数据标准化
-            scaler_x = StandardScaler()
-            scaler_y = StandardScaler()
-            data_scaled = scaler_x.fit_transform(data)
-            target_scaled = scaler_y.fit_transform(target)
+            scaler = StandardScaler()
+            data_scaled = scaler.fit_transform(data)
+            labels_scaled = StandardScaler().fit_transform(labels)  # 标签也进行标准化
 
-            # PLS回归降维
-            pls = PLSRegression(n_components=5)  # 取前5个成分
-            pls_result = pls.fit_transform(data_scaled, target_scaled)[0]  # 获取X的降维结果
+            # PLS 分析
+            self.pls = PLSRegression(n_components=5)  # 取前5个成分
+            pls_result = self.pls.fit_transform(data_scaled, labels_scaled)[0]
             
-            # 将PLS结果转为DataFrame并添加标签列
-            pls_df = pd.DataFrame(pls_result, columns=[f"PLS Comp {i+1}" for i in range(5)])
-            pls_df['Label'] = labels  # 加入标签列，用于分组显示
+            # 将PLS得分转为DataFrame并添加标签列
+            pls_df = pd.DataFrame(pls_result, columns=[f"PLS {i+1}" for i in range(5)])
+            pls_df['Label'] = labels.flatten()  # 标签列
+            pls_df['Type'] = 'Score'  # 标识得分矩阵
+            pls_df.index = [f"Sample_{i+1}" for i in range(pls_df.shape[0])]  # 修改行索引
 
-            # 使用Seaborn绘制多维散点矩阵
+            # 获取载荷矩阵
+            loadings = self.pls.x_weights_  # PLS载荷矩阵
+            loadings_df = pd.DataFrame(loadings, columns=[f"PLS {i+1}" for i in range(5)],
+                                    index=[f"Var {i+1}" for i in range(data.shape[1])])
+            loadings_df['Type'] = 'Loading'  # 标识载荷矩阵
+            loadings_df['Label'] = 'N/A'  # 载荷矩阵无标签，填充占位符
+
+            # 结果数值四舍五入到4位小数
+            pls_df = pls_df.round(4)
+            loadings_df = loadings_df.round(4)
+
+            # 合并得分矩阵和载荷矩阵
+            combined_df = pd.concat([pls_df, loadings_df], axis=0)
+            columns = ['Type', 'Label'] + [f"PLS {i+1}" for i in range(5)]  # 重新排列列顺序
+            combined_df = combined_df[columns]
+
+            # 将结果显示在 tableWidget_2 中
+            self.display_table(combined_df)
+
+            # 绘制 PLS 结果可视化
             self.visualize_pls_pairplot(pls_df)
 
         except ValueError:
@@ -1500,17 +1566,20 @@ class Toolbar:
 
     def visualize_pls_pairplot(self, pls_df):
         sns.set(style="whitegrid")
+        
+        # 绘制 PLS 多维散点矩阵
         pairplot = sns.pairplot(
             pls_df, 
             hue="Label", 
-            plot_kws={'alpha': 0.6, 's': 50}, 
-            diag_kind='kde'
+            plot_kws={'alpha': 0.6, 's': 50},
+            diag_kind="hist"
         )
-
+        
         pairplot.fig.suptitle("PLS Pair Plot", y=1.02)  # 设置标题
         plt.show()
-
+        
         QMessageBox.information(self.tableWidget_2, "Success", "PLS multidimensional scatter plot has been generated")
+
 
     def Factor_Analysis_cb(self):
         # 清空 tableWidget2
