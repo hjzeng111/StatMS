@@ -1,6 +1,7 @@
 import sys
 import os
 import itertools
+import mplcursors
 os.environ["OMP_NUM_THREADS"] = "1"
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -22,6 +23,8 @@ from sklearn.impute import KNNImputer, IterativeImputer
 from sklearn.impute import IterativeImputer
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.preprocessing import StandardScaler
+from scipy.stats import zscore
+from scipy.cluster.hierarchy import linkage
 from PyQt5.QtWidgets import QTableWidgetItem, QPushButton,QVBoxLayout, QWidget
 from PyQt5.QtCore import Qt
 from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg 
@@ -33,7 +36,6 @@ from sklearn.metrics import roc_curve, auc, RocCurveDisplay
 from sklearn.cross_decomposition import PLSRegression
 from factor_analyzer import FactorAnalyzer
 from factor_analyzer.factor_analyzer import calculate_kmo, calculate_bartlett_sphericity  
-
 # 配置字体支持中文
 rcParams['font.sans-serif'] = ['SimHei']  # 设置中文字体（黑体）
 rcParams['axes.unicode_minus'] = False   # 避免负号显示错误
@@ -792,7 +794,7 @@ class Toolbar:
 
     def update_data(self, new_data):
         self.original_data = new_data
-
+        
     def page1(self):
         self.stackedWidget.setCurrentIndex(0)
 
@@ -1256,15 +1258,25 @@ class Toolbar:
                     group_indices[group] = []
                 group_indices[group].append(index) 
 
-            # 确保有两个不同的组别
-            if len(group_indices) != 2:
-                QMessageBox.warning(self.tableWidget_2, "Error", "Correlation analysis requires two distinct groups")
+            # 统计不同组的数量
+            num_groups = len(group_indices)
+
+            # 若组数不等于2，给出提示并仅绘制热图
+            if num_groups != 2:
+                QMessageBox.warning(self.tableWidget_2, "Error", "More than two groups detected. Only the correlation heatmap will be generated.")
+                self.plot_correlation_heatmap()
                 return
 
             # 获取两个组别的索引
             unique_groups = list(group_indices.keys())
             group1_indices = group_indices[unique_groups[0]]
             group2_indices = group_indices[unique_groups[1]]
+
+            # 检查样本数量是否相等
+            if len(group1_indices) != len(group2_indices):
+                QMessageBox.warning(self.tableWidget_2, "Error", "Unequal sample sizes between groups. Only the correlation heatmap will be generated.")
+                self.plot_correlation_heatmap()
+                return
 
             # 定义相关性分析结果存储
             correlation_results = []
@@ -1292,29 +1304,23 @@ class Toolbar:
                             QMessageBox.warning(self.tableWidget, "Error", "Invalid data format. Ensure all data are numeric")
                             return       
 
-                # 检查组1和组2的长度是否相同
-                if len(group1_data) != len(group2_data):
-                    print(f"Inconsistent data length in column {col}: Group 1 length is {len(group1_data)}, Group 2 length is {len(group2_data)}")
-                    QMessageBox.warning(self.tableWidget, "Error", f"Data format error in column {col}: Unequal number of data points between groups")
-                    return
-
-                # 计算相关性和 p 值（确保数据点足够）
+                # 计算相关性
                 if len(group1_data) > 1 and len(group2_data) > 1:
                     correlation, p_value = pearsonr(group1_data, group2_data)
                 else:
-                    correlation, p_value = None, None  # 如果数据点不足以计算相关性
+                    correlation, p_value = None, None  # 数据不足
 
                 # 保存结果
                 correlation_results.append((identifiers[col - 2], correlation, p_value))
-                
-            # 显示结果到 tableWidget_2
+            
+            # 显示结果
             self.display_correlation_results(correlation_results)
 
-            # 将计算结果传递到绘图函数
+            # 绘制完整的分析（散点图 + 热图）
             self.plot_correlation_with_tooltip(correlation_results)
 
         except ValueError as e:
-            print(f"Data format error in column {col}: {str(e)}")
+            print(f"Data format error: {str(e)}")
             QMessageBox.warning(self.tableWidget_2, "Error", "Invalid data format. Ensure all data are numeric")
 
     def display_correlation_results(self, correlation_results):
@@ -1349,11 +1355,15 @@ class Toolbar:
 
         QMessageBox.information(self.tableWidget_2, "Success", "Correlation analysis results have been updated")
 
-    def plot_correlation_with_tooltip(self, correlation_results):
-        identifiers = [result[0] for result in correlation_results]
-        correlations = [result[1] for result in correlation_results if result[1] is not None]
-        p_values = [result[2] for result in correlation_results if result[2] is not None]
+    def plot_correlation_with_tooltip(self, correlation_results, show_heatmap=True):
+        # 过滤掉 None 值并保持索引匹配
+        filtered_results = [(id, corr, p) for id, corr, p in correlation_results if corr is not None and p is not None]
+        
+        identifiers = [result[0] for result in filtered_results]
+        correlations = [result[1] for result in filtered_results]
+        p_values = [result[2] for result in filtered_results]
 
+        # 创建散点图
         fig, ax = plt.subplots()
         scatter = ax.scatter(correlations, p_values, picker=True)
 
@@ -1362,7 +1372,7 @@ class Toolbar:
         ax.set_xlabel("Correlation Coefficient")
         ax.set_ylabel("P-value")
 
-        # 创建一个用于显示悬停信息的注释框
+        # 创建悬停注释框
         annot = ax.annotate("", xy=(0, 0), xytext=(15, 15),
                             textcoords="offset points",
                             bbox=dict(boxstyle="round", fc="w"),
@@ -1371,15 +1381,15 @@ class Toolbar:
 
         def update_annot(ind):
             """更新注释框内容"""
-            x, y = scatter.get_offsets()[ind["ind"][0]]
+            index = ind["ind"][0]  # 取第一个匹配的点
+            x, y = scatter.get_offsets()[index]
             annot.xy = (x, y)
-            identifier = identifiers[ind["ind"][0]]
-            annot.set_text(f"{identifier}\nCorrelation: {x:.2f}\nP-value: {y:.4f}\nCoords: ({x:.2f}, {y:.4f})")
+            identifier = identifiers[index]
+            annot.set_text(f"{identifier}\nCorr: {x:.2f}\nP-val: {y:.4f}")
             annot.get_bbox_patch().set_alpha(0.8)
 
         def hover(event):
             """鼠标悬停事件"""
-            vis = annot.get_visible()
             if event.inaxes == ax:
                 cont, ind = scatter.contains(event)
                 if cont:
@@ -1387,13 +1397,83 @@ class Toolbar:
                     annot.set_visible(True)
                     fig.canvas.draw_idle()
                 else:
-                    if vis:
+                    if annot.get_visible():
                         annot.set_visible(False)
                         fig.canvas.draw_idle()
 
-        # 绑定鼠标移动事件到悬停函数
+        # 绑定鼠标移动事件
         fig.canvas.mpl_connect("motion_notify_event", hover)
 
+        
+        self.plot_correlation_heatmap()
+        
+        plt.show()
+
+    def plot_correlation_heatmap(self):
+        """绘制带鼠标悬停功能的相关性热图"""
+        df_data = self.original_data.iloc[1:, 2:]
+        if not isinstance(df_data, pd.DataFrame):
+            df_data = pd.DataFrame(df_data)
+        
+        # 确保所有列为数值型
+        df_data = df_data.apply(pd.to_numeric, errors="coerce")
+        
+        # 计算相关性矩阵
+        correlation_matrix = df_data.corr()
+        
+        # 创建画布
+        fig, ax = plt.subplots(figsize=(8, 6))
+        
+        # 使用 imshow 绘制热图（直接控制 QuadMesh）
+        im = ax.imshow(
+            correlation_matrix,
+            cmap="coolwarm",
+            aspect="auto",
+            vmin=-1,
+            vmax=1,
+            interpolation="nearest"
+        )
+        im.set_picker(True)  # 关键修复：强制启用拾取
+        
+        # 设置坐标轴标签
+        x_labels = correlation_matrix.columns.tolist()
+        y_labels = correlation_matrix.index.tolist()
+        ax.set_xticks(np.arange(len(x_labels)))
+        ax.set_yticks(np.arange(len(y_labels)))
+        ax.set_xticklabels(x_labels, rotation=45, ha="right")
+        ax.set_yticklabels(y_labels)
+        
+        # 添加颜色条
+        plt.colorbar(im, ax=ax)
+        
+        # 绑定悬停事件
+        cursor = mplcursors.cursor(im, hover=True)
+
+        @cursor.connect("add")
+        def on_hover(sel):
+            """鼠标悬停时显示变量名和相关系数"""
+            row_idx, col_idx = int(sel.target[1]), int(sel.target[0])  # imshow 的坐标顺序为 (x, y)
+            if 0 <= row_idx < len(y_labels) and 0 <= col_idx < len(x_labels):
+                x_label = x_labels[col_idx]
+                y_label = y_labels[row_idx]
+                corr_value = correlation_matrix.iloc[row_idx, col_idx]
+                
+                sel.annotation.set_text(f"Row: {x_label}\nCol: {y_label}\nCorrelation: {corr_value:.2f}")
+                sel.annotation.get_bbox_patch().set_alpha(0.8)
+
+        # 手动实现 keep_inside 功能
+        def on_move(event):
+            """鼠标移动时检查是否在热图内"""
+            if not event.inaxes:  # 如果鼠标不在热图内
+                for sel in cursor.selections:
+                    sel.annotation.set_visible(False)
+                plt.draw()
+
+        # 绑定鼠标移动事件
+        fig.canvas.mpl_connect("motion_notify_event", on_move)
+
+        plt.title("Correlation Heatmap")
+        plt.tight_layout()
         plt.show()
 
     def PCA_cb(self):
@@ -1579,7 +1659,6 @@ class Toolbar:
         plt.show()
         
         QMessageBox.information(self.tableWidget_2, "Success", "PLS multidimensional scatter plot has been generated")
-
 
     def Factor_Analysis_cb(self):
         # 清空 tableWidget2
@@ -1784,15 +1863,15 @@ class Toolbar:
         QMessageBox.information(self.tableWidget_2, "Success", "Discriminant analysis results have been updated")
 
     def Cluster_Analysis_cb(self):
-        # 清空 tableWidget2
+        # 清空 tableWidget_2
         self.tableWidget_2.clear()
         
-        # Extract data
+        # 提取数据
         data = []
         identifiers = list(self.original_data.columns[2:])
         numRows = self.tableWidget.rowCount()
         numCols = self.tableWidget.columnCount()
-
+        
         if numCols < 3:
             QMessageBox.warning(self.tableWidget, "Error", "Insufficient columns to perform clustering analysis")
             return
@@ -1804,19 +1883,92 @@ class Toolbar:
                     row_data.append(float(self.tableWidget.item(row, col).text()))
                 data.append(row_data)
 
-            # Perform k-means clustering
-            num_clusters = 3  # Set number of clusters (you can adjust this or prompt the user for input)
-            kmeans = KMeans(n_clusters=num_clusters, n_init=10)
+            # K-Means 聚类
+            num_clusters = 3  # 设置聚类数
             data = np.array(data)
+            kmeans = KMeans(n_clusters=num_clusters, n_init=10, random_state=42)
             kmeans.fit(data)
             cluster_labels = kmeans.labels_
             cluster_centers = kmeans.cluster_centers_
-
-            # Display results
+            
+            # 显示聚类分析结果
             self.display_cluster_analysis_result(identifiers, cluster_labels, cluster_centers)
+
+            # 绘制聚类 PCA 图
+            self.plot_cluster_pca(data, cluster_labels)
+
+            # 绘制聚类热图
+            self.plot_cluster_heatmap(data, cluster_labels,identifiers)
+            
 
         except ValueError:
             QMessageBox.warning(self.tableWidget, "Error", "Invalid data format. Ensure all data are numeric")
+
+    def plot_cluster_pca(self, data, cluster_labels):
+        """
+        绘制 K-Means PCA 聚类图
+        """
+        pca = PCA(n_components=2)
+        data_pca = pca.fit_transform(data)
+
+        df_pca = np.column_stack((data_pca, cluster_labels))
+        
+        plt.figure(figsize=(10, 8))
+        sns.scatterplot(x=df_pca[:, 0], y=df_pca[:, 1], hue=cluster_labels, palette='Set1', s=100, edgecolor='black')
+
+        plt.xlabel(f'PC1 ({pca.explained_variance_ratio_[0] * 100:.1f}%)')
+        plt.ylabel(f'PC2 ({pca.explained_variance_ratio_[1] * 100:.1f}%)')
+        plt.title("K-Means Clustering with PCA")
+        plt.legend(title="Cluster")
+        plt.show()
+
+    def plot_cluster_heatmap(self, data, cluster_labels, identifiers):
+        """
+        绘制 K-Means 聚类热图，添加 Z-score 计算，并在左侧标注物质名称
+        """
+        # 计算 Z-score 进行标准化
+        data_zscore = zscore(data, axis=0)  # 按行（物质）计算 Z-score
+
+        # 转换为 DataFrame，行索引为物质名称，列索引为样本编号
+        df = pd.DataFrame(data_zscore, columns=identifiers)
+
+        # 转置 DataFrame，确保物质是行索引
+        df = df.T  
+
+        # 设置 X 轴为分组（假设 cluster_labels 对应列编号）
+        group_labels = [f"Sample {i+1}" for i in range(df.shape[1])]
+        df.columns = group_labels  # 设定列索引
+
+        # 层次聚类链接
+        row_linkage = linkage(df, method='ward')
+
+        # 画出 clustermap
+        g = sns.clustermap(
+            df, 
+            row_cluster=True, col_cluster=False,  # 仅对物质进行聚类
+            row_linkage=row_linkage, 
+            cmap="RdYlGn", 
+            linewidths=0.5, 
+            figsize=(12, 8), 
+            z_score=None,  # 已经手动计算了 Z-score
+            yticklabels=True,
+            cbar_kws={"shrink": 0.5}, # 缩小颜色条，避免影响图像
+            dendrogram_ratio=(0.02, 0.1), # 调整左侧树状图和顶部空白区域大小
+           
+        )
+
+        # 调整热图边距，防止边界裁切
+        g.ax_heatmap.set_position([0.2, 0.1, 0.6, 0.8])  # [left, bottom, width, height]
+
+        # 调整整个图的边距
+        g.fig.subplots_adjust(left=0.06, right=0.9, top=0.95, bottom=0.15)
+
+        # 设置轴标签
+        g.ax_heatmap.set_xlabel("Samples", fontsize=12)
+        g.ax_heatmap.set_ylabel("Substances", fontsize=12)
+
+        plt.title("Clustered Heatmap\nwith Z-score", fontsize=12)
+        plt.show()
 
     def display_cluster_analysis_result(self, identifiers, cluster_labels, cluster_centers):
         # Clear tableWidget_2
