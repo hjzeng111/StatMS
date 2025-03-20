@@ -12,11 +12,15 @@
 
 内存：8GB 及以上
 
-Python 环境：3.8 或更高版本
+Python 环境：3.8 版本及以上，3.12版本及以下
 
 安装步骤：
 
 1.下载软件安装包，解压到本地目录。
+
+使用下列命令直接下载至当前路径下或直接下载zip文件至本地
+
+wget https://github.com/hjzeng111/StatMS/releases/download/StatMS_V1.0.1/StatMS.zip -OutFile StatMS.zip
 
 2.打开终端，进入软件目录，运行以下命令：
 
