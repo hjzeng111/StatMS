@@ -12,7 +12,7 @@ from matplotlib import rcParams
 from PyQt5 import QtWidgets, uic
 from PyQt5.QtGui import QFont
 from PyQt5.QtCore import QThread,pyqtSignal
-from PyQt5.QtWidgets import QMenu, QToolBar, QInputDialog, QAction, QProgressDialog, QSplitter, QTableWidget, QDialog, QFileDialog, QMessageBox,QVBoxLayout, QLabel, QListWidget
+from PyQt5.QtWidgets import QMenu, QToolBar, QInputDialog, QComboBox, QAction, QProgressDialog, QSplitter, QTableWidget, QDialog, QFileDialog, QMessageBox,QVBoxLayout, QLabel, QListWidget
 from PyQt5.QtCore import QCoreApplication
 from scipy.stats import ttest_ind, f_oneway, pearsonr
 from sklearn.decomposition import PCA
@@ -947,7 +947,7 @@ class Toolbar:
             self.tableWidget_2.resizeColumnToContents(col)
 
         QMessageBox.information(self.tableWidget_2, "Success", "Fold Change results have been updated")
-     
+        
     def T_test_cb(self):
         # 从 tableWidget 中提取数据
         identifiers = list(self.editable_data.columns[2:])
@@ -1490,56 +1490,125 @@ class Toolbar:
             return
 
         try:
+            # 提取数据
             for row in range(numRows):
                 row_data = []
-                for col in range(2, numCols):  
-                    row_data.append(float(self.tableWidget.item(row, col).text()))
+                for col in range(2, numCols):  # 从第3列开始读取数据
+                    item = self.tableWidget.item(row, col)
+                    if item is None or item.text() == "":  # 检查是否为空
+                        row_data.append(np.nan)  # 将空值替换为 NaN
+                    else:
+                        try:
+                            row_data.append(float(item.text()))  # 尝试转换为浮点数
+                        except ValueError:
+                            QMessageBox.warning(self.tableWidget, "Error", f"Non-numeric data found at row{row+1}, column {col+1}")
+                            return
                 data.append(row_data)
                 # 获取标签数据（假设在第二列存放组别信息，0/1表示不同组别）
                 labels.append(self.editable_data.iloc[row, 1])
- 
- 
+
+            # 转换为 numpy 数组
             data = np.array(data)
-            labels = np.array(labels)
+
+
+            # 处理缺失值
+            from sklearn.impute import SimpleImputer
+            imputer = SimpleImputer(strategy='mean')
+            data = imputer.fit_transform(data)
 
             # 数据标准化
             scaler = StandardScaler()
             data_scaled = scaler.fit_transform(data)
 
-            # PCA降维
-            self.pca = PCA(n_components=5)  # 取前5个主成分
+
+            # 动态设置主成分数量
+            n_components = 8  # 可在此处修改为任意值（不超过特征数）
+            self.pca = PCA(n_components=n_components)
             pca_result = self.pca.fit_transform(data_scaled)
             
             # 将PCA结果转为DataFrame并添加标签列
-            pca_df = pd.DataFrame(pca_result, columns=[f"PC {i+1}" for i in range(5)])
-            pca_df['Label'] = labels  # 标签列
-            pca_df['Type'] = 'Score'  # 添加标识列：得分矩阵
-            pca_df.index = [f"Sample_{i+1}" for i in range(pca_df.shape[0])]  # 修改行索引
+            pca_df = pd.DataFrame(pca_result, columns=[f"PC {i+1}" for i in range(n_components)])  
+            pca_df['Label'] = labels
+            pca_df['Type'] = 'Score'
+            pca_df.index = [f"Sample_{i+1}" for i in range(pca_df.shape[0])]
 
             # 获取载荷矩阵
-            loadings = self.pca.components_.T  # 转置以匹配原始变量
-            loadings_df = pd.DataFrame(loadings, columns=[f"PC {i+1}" for i in range(5)], 
-                                    index=[f"Var {i+1}" for i in range(data.shape[1])])
-            loadings_df['Type'] = 'Loading'  # 添加标识列：载荷矩阵
-            loadings_df['Label'] = 'N/A'     # 载荷矩阵无标签，填充占位符
+            loadings = self.pca.components_.T
+            loadings_df = pd.DataFrame(loadings, columns=[f"PC {i+1}" for i in range(n_components)],  
+                                        index=[f"Var {i+1}" for i in range(data.shape[1])])
+            loadings_df['Type'] = 'Loading'
+            loadings_df['Label'] = 'N/A'
 
-            # 将得分矩阵和载荷矩阵的数值精确到2位有效数字
-            pca_df = pca_df.round(4)  # 得分矩阵
-            loadings_df = loadings_df.round(4)  # 载荷矩阵
+            # 数值精度处理
+            pca_df = pca_df.round(4)
+            loadings_df = loadings_df.round(4)
 
-            # 将得分矩阵和载荷矩阵合并为一个表格
-            combined_df = pd.concat([pca_df, loadings_df], axis=0)
-            columns = ['Type', 'Label'] + [f"PC {i+1}" for i in range(5)]  # 将标识列放在前两列
-            combined_df = combined_df[columns]  
+            # **（1）得分矩阵显示在 tableWidget_2**
+            pca_df = pca_df[['Label', 'Type'] + [f"PC {i+1}" for i in range(n_components)]]
+            self.display_table(pca_df)
 
-            # 将合并后的表格显示在 tableWidget_2 中
-            self.display_table(combined_df)
+            # **（2）载荷矩阵显示在弹窗**
+            self.show_loadings_popup(loadings_df)
 
-            # 使用Seaborn绘制多维散点矩阵
+            # 显示结果
             self.visualize_pca_pairplot(pca_df)
 
-        except ValueError:
-            QMessageBox.warning(self.tableWidget, "Error", "Invalid data format. Ensure all data are numeric")
+        except Exception as e:
+            QMessageBox.warning(self.tableWidget, "Error", f"Error: {str(e)}")
+
+    def show_loadings_popup(self, loadings_df):
+        """弹窗显示 PCA 载荷矩阵"""
+        self.loadings_dialog = QDialog(None)  # 让对话框保持在主窗口下，而不是匿名实例
+        self.loadings_dialog.setWindowTitle("PCA Loadings Matrix")
+        layout = QVBoxLayout()
+
+        title_label = QLabel("<b>PCA Loadings Matrix</b>")
+        layout.addWidget(title_label)
+
+        # **调整列顺序，把 'type' 和 'label' 放到最前面**
+        priority_cols = ['Type', 'Label']
+        other_cols = [col for col in loadings_df.columns if col not in priority_cols]
+        ordered_cols = priority_cols + other_cols  # 确保 type 和 label 在前
+
+        loadings_df = loadings_df[ordered_cols]  # 重新排列 DataFrame
+
+        table = QTableWidget()
+        table.setRowCount(loadings_df.shape[0])
+        table.setColumnCount(loadings_df.shape[1])
+        table.setHorizontalHeaderLabels(loadings_df.columns)
+        table.setVerticalHeaderLabels(loadings_df.index)
+
+        for row in range(loadings_df.shape[0]):
+            for col in range(loadings_df.shape[1]):
+                item = QTableWidgetItem(str(loadings_df.iloc[row, col]))
+                item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, col, item)
+
+        table.resizeColumnsToContents()
+        table.resizeRowsToContents()
+        layout.addWidget(table)
+
+        save_button = QPushButton("Save")
+        save_button.clicked.connect(lambda: self.save_loadings_matrix(loadings_df))
+        layout.addWidget(save_button)
+
+        self.loadings_dialog.setLayout(layout)
+        self.loadings_dialog.show()
+    
+    def save_loadings_matrix(self, loadings_df):
+        """保存 PCA 载荷矩阵到 CSV 或 Excel"""
+        options = QFileDialog.Options()
+        filePath, _ = QFileDialog.getSaveFileName(None, "Save PCA Loadings Matrix", "",
+                                                "CSV Files (*.csv);;Excel Files (*.xlsx)", options=options)
+        if filePath:
+            try:
+                if filePath.endswith('.csv'):
+                    loadings_df.to_csv(filePath, index=True)
+                else:
+                    loadings_df.to_excel(filePath, index=True)
+                QMessageBox.information(None, "Success", "Loadings matrix saved successfully!")
+            except Exception as e:
+                QMessageBox.warning(None, "Error", f"Failed to save file: {str(e)}")
 
     def display_table(self, df):
         """将 DataFrame 显示在 tableWidget_2 中"""
@@ -1553,32 +1622,76 @@ class Toolbar:
                 self.tableWidget_2.setItem(i, j, item)
 
     def visualize_pca_pairplot(self, pca_df):
-        sns.set(style="whitegrid")
+        class PCAPlotDialog(QDialog):
+            def __init__(self, parent, pca_df, explained_variance):
+                super().__init__(parent)
+                self.pca_df = pca_df
+                self.explained_variance = explained_variance
+                self.init_ui()
+
+            def init_ui(self):
+                self.setWindowTitle("PCA Visualization Options")
+                self.setGeometry(600, 600, 300, 150)
+
+                layout = QVBoxLayout()
+
+                # 选择主成分数量的下拉框
+                self.label = QLabel("Select number of principal components:")
+                layout.addWidget(self.label) 
+
+                self.comboBox = QComboBox()
+                max_components = min(len(self.pca_df.columns) - 2, 8)  # 最多显示8个PC
+                self.comboBox.addItems([str(i) for i in range(2, max_components + 1)])
+                layout.addWidget(self.comboBox)
+
+                # 触发绘图的按钮
+                self.plot_button = QPushButton("Generate PCA Plot")
+                self.plot_button.clicked.connect(self.generate_plot)
+                layout.addWidget(self.plot_button)
+
+                self.setLayout(layout)
+
+            def generate_plot(self):
+
+                self.num_components = int(self.comboBox.currentText())  # 读取用户选择
+                selected_pcs = [f"PC {i+1}" for i in range(self.num_components)]
+
+                # 仅保留用户选择的主成分列
+                filtered_pca_df = self.pca_df[selected_pcs + ["Label"]]
+
+                 # 关闭当前选择窗口
+                self.accept()  # 关闭 QDialog (即 PCAPlotDialog)
+
+                # 重新绘制 Pair Plot
+                self.plot_pca_pairplot(filtered_pca_df, selected_pcs)
+                
+
+            def plot_pca_pairplot(self, pca_df, selected_pcs):
+                sns.set(style="whitegrid")
+
+                def add_variance_text(x, **kwargs):
+                    ax = plt.gca()
+                    pc_index = int(x.name.split()[1]) - 1
+                    variance_text = f"PC {pc_index+1}\n{self.explained_variance[pc_index] * 100:.1f}%"
+                    ax.text(0.5, 0.5, variance_text, ha="center", va="center", fontsize=14, fontweight="bold")
+
+                pairplot = sns.pairplot(
+                    pca_df, 
+                    hue="Label", 
+                    plot_kws={'alpha': 0.6, 's': 50}, 
+                    diag_kind="hist"
+                )
+                pairplot.map_diag(add_variance_text)
+                pairplot.fig.suptitle(f"PCA Pair Plot ({len(selected_pcs)} Components)", y=1.02)
+                plt.show()
 
         # 获取 PCA 方差贡献率
-        explained_variance = self.pca.explained_variance_ratio_  # 获取方差贡献率
+        explained_variance = self.pca.explained_variance_ratio_
 
-        # 自定义对角线绘制函数，添加方差贡献率文本
-        def add_variance_text(x, **kwargs):
-            ax = plt.gca()  # 获取当前子图
-            pc_index = int(x.name.split()[1]) - 1  # 获取主成分索引
-            variance_text = f"PC {pc_index+1}\n{explained_variance[pc_index] * 100:.1f}%"  # 格式化文本
-            ax.text(0.5, 0.5, variance_text, ha="center", va="center", fontsize=14, fontweight="bold")  # 居中显示文本
-
-        # 绘制 PairPlot 并替换对角线
-        pairplot = sns.pairplot(
-            pca_df, 
-            hue="Label", 
-            plot_kws={'alpha': 0.6, 's': 50}, 
-            diag_kind="hist"
-        )
-        pairplot.map_diag(add_variance_text)  # 让对角线显示方差贡献率
-
-        pairplot.fig.suptitle("PCA Pair Plot", y=1.02)  # 设置标题
-        plt.show()
-
-        QMessageBox.information(self.tableWidget_2, "Success", "PCA multidimensional scatter plot has been generated")
-   
+        # 弹出 PCA 选择窗口
+        dialog = PCAPlotDialog(None, pca_df, explained_variance)
+        dialog.exec_()
+           
     def PLS_cb(self):
         # 清空 tableWidget_2
         self.tableWidget_2.clear()
@@ -1593,35 +1706,51 @@ class Toolbar:
             return
 
         try:
+            # 提取数据
             for row in range(numRows):
                 row_data = []
-                for col in range(2, numCols):  
-                    row_data.append(float(self.tableWidget.item(row, col).text()))
+                for col in range(2, numCols):  # 从第3列开始读取数据
+                    item = self.tableWidget.item(row, col)
+                    if item is None or item.text() == "":  # 检查是否为空
+                        row_data.append(np.nan)  # 将空值替换为 NaN
+                    else:
+                        try:
+                            row_data.append(float(item.text()))  # 尝试转换为浮点数
+                        except ValueError:
+                            QMessageBox.warning(self.tableWidget, "Error", f"非数值型数据位于行 {row+1}, 列 {col+1}")
+                            return
                 data.append(row_data)
                 # 获取分类标签
                 labels.append(self.editable_data.iloc[row, 1])
 
+            # 转换为 numpy 数组
             data = np.array(data)
             labels = np.array(labels).reshape(-1, 1)  # PLS需要二维标签
+
+            # 检查数据是否包含非数值型值
+            if np.isnan(data).any() or np.isinf(data).any():
+                QMessageBox.warning(self.tableWidget, "Error", "数据包含 NaN 或无穷大值，请检查数据")
+                return
 
             # 数据标准化
             scaler = StandardScaler()
             data_scaled = scaler.fit_transform(data)
             labels_scaled = StandardScaler().fit_transform(labels)  # 标签也进行标准化
 
-            # PLS 分析
-            self.pls = PLSRegression(n_components=5)  # 取前5个成分
+            # 动态设置主成分数量
+            n_components = 8 # 最多取8个成分，可根据需求调整
+            self.pls = PLSRegression(n_components=n_components)
             pls_result = self.pls.fit_transform(data_scaled, labels_scaled)[0]
             
             # 将PLS得分转为DataFrame并添加标签列
-            pls_df = pd.DataFrame(pls_result, columns=[f"PLS {i+1}" for i in range(5)])
+            pls_df = pd.DataFrame(pls_result, columns=[f"PLS {i+1}" for i in range(n_components)])  # 动态列名
             pls_df['Label'] = labels.flatten()  # 标签列
             pls_df['Type'] = 'Score'  # 标识得分矩阵
             pls_df.index = [f"Sample_{i+1}" for i in range(pls_df.shape[0])]  # 修改行索引
 
             # 获取载荷矩阵
             loadings = self.pls.x_weights_  # PLS载荷矩阵
-            loadings_df = pd.DataFrame(loadings, columns=[f"PLS {i+1}" for i in range(5)],
+            loadings_df = pd.DataFrame(loadings, columns=[f"PLS {i+1}" for i in range(n_components)],
                                     index=[f"Var {i+1}" for i in range(data.shape[1])])
             loadings_df['Type'] = 'Loading'  # 标识载荷矩阵
             loadings_df['Label'] = 'N/A'  # 载荷矩阵无标签，填充占位符
@@ -1632,7 +1761,7 @@ class Toolbar:
 
             # 合并得分矩阵和载荷矩阵
             combined_df = pd.concat([pls_df, loadings_df], axis=0)
-            columns = ['Type', 'Label'] + [f"PLS {i+1}" for i in range(5)]  # 重新排列列顺序
+            columns = ['Type', 'Label'] + [f"PLS {i+1}" for i in range(n_components)]  # 动态列名
             combined_df = combined_df[columns]
 
             # 将结果显示在 tableWidget_2 中
@@ -1641,24 +1770,80 @@ class Toolbar:
             # 绘制 PLS 结果可视化
             self.visualize_pls_pairplot(pls_df)
 
-        except ValueError:
-            QMessageBox.warning(self.tableWidget, "Error", "Invalid data format. Ensure all data are numeric")
+        except Exception as e:
+            QMessageBox.warning(self.tableWidget, "Error", f"Error: {str(e)}")
 
-    def visualize_pls_pairplot(self, pls_df):
-        sns.set(style="whitegrid")
+    def visualize_pls_pairplot(self, pls_df, explained_variance=None):
+        class PLSPlotDialog(QDialog):
+            def __init__(self, parent, pls_df, explained_variance):
+                super().__init__(parent)
+                self.pls_df = pls_df
+                self.explained_variance = explained_variance
+                self.init_ui()
+
+            def init_ui(self):
+                self.setWindowTitle("PLS Visualization Options")
+                self.setGeometry(100, 100, 300, 150)
+
+                layout = QVBoxLayout()
+
+                # 选择主成分数量的下拉框
+                self.label = QLabel("Select number of PLS components:")
+                layout.addWidget(self.label)
+
+                self.comboBox = QComboBox()
+                max_components = min(len(self.pls_df.columns) - 2, 8)  # 最多显示 8 个主成分
+                self.comboBox.addItems([str(i) for i in range(2, max_components + 1)])
+                layout.addWidget(self.comboBox)
+
+                # 触发绘图的按钮
+                self.plot_button = QPushButton("Generate PLS Plot")
+                self.plot_button.clicked.connect(self.generate_plot)
+                layout.addWidget(self.plot_button)
+
+                self.setLayout(layout)
+
+            def generate_plot(self):
+                num_components = int(self.comboBox.currentText())  # 读取用户选择
+                selected_pcs = [f"PLS {i+1}" for i in range(num_components)]
+
+                # 仅保留用户选择的主成分列
+                filtered_pls_df = self.pls_df[selected_pcs + ["Label"]]
+
+                 # 关闭当前选择窗口
+                self.accept()  # 关闭 QDialog (即 PCAPlotDialog)
+
+                # 重新绘制 Pair Plot
+                self.plot_pls_pairplot(filtered_pls_df, selected_pcs)
+
+            def plot_pls_pairplot(self, pls_df, selected_pcs):
+                sns.set(style="whitegrid")
+
+                def add_variance_text(x, **kwargs):
+                    """在对角线上添加方差贡献率"""
+                    if self.explained_variance is None:
+                        return
+
+                    ax = plt.gca()
+                    pc_index = int(x.name.split()[1]) - 1
+                    if pc_index < len(self.explained_variance):
+                        variance_text = f"PLS {pc_index+1}\n{self.explained_variance[pc_index] * 100:.1f}%"
+                        ax.text(0.5, 0.5, variance_text, ha="center", va="center", fontsize=14, fontweight="bold")
+
+                pairplot = sns.pairplot(
+                    pls_df, 
+                    hue="Label", 
+                    plot_kws={'alpha': 0.6, 's': 50}, 
+                    diag_kind="hist"
+                )
+                pairplot.map_diag(add_variance_text)
+                pairplot.fig.suptitle(f"PLS Pair Plot ({len(selected_pcs)} Components)", y=1.02)
+                plt.show()
+
         
-        # 绘制 PLS 多维散点矩阵
-        pairplot = sns.pairplot(
-            pls_df, 
-            hue="Label", 
-            plot_kws={'alpha': 0.6, 's': 50},
-            diag_kind="hist"
-        )
-        
-        pairplot.fig.suptitle("PLS Pair Plot", y=1.02)  # 设置标题
-        plt.show()
-        
-        QMessageBox.information(self.tableWidget_2, "Success", "PLS multidimensional scatter plot has been generated")
+        # **弹出 PLS 选择窗口**
+        dialog = PLSPlotDialog(None, pls_df, explained_variance)
+        dialog.exec_()
 
     def Factor_Analysis_cb(self):
         # 清空 tableWidget2
@@ -1894,31 +2079,54 @@ class Toolbar:
             # 显示聚类分析结果
             self.display_cluster_analysis_result(identifiers, cluster_labels, cluster_centers)
 
-            # 绘制聚类 PCA 图
-            self.plot_cluster_pca(data, cluster_labels)
-
             # 绘制聚类热图
             self.plot_cluster_heatmap(data, cluster_labels,identifiers)
             
+            # 绘制聚类 PCA 图
+            self.plot_cluster_pca(data, cluster_labels)
 
         except ValueError:
             QMessageBox.warning(self.tableWidget, "Error", "Invalid data format. Ensure all data are numeric")
 
     def plot_cluster_pca(self, data, cluster_labels):
         """
-        绘制 K-Means PCA 聚类图
+        让用户选择簇的数量，并绘制 K-Means PCA 聚类图
         """
+        # 定义可选簇的数量（1到8）
+        cluster_options = [str(i) for i in range(1, 9)]  # ['1', '2', ..., '8']
+
+        # 弹出下拉选项框，让用户选择簇的数量
+        selected_cluster, ok = QInputDialog.getItem(
+            None,  # 父窗口
+            "Select Number of Clusters",  # 对话框标题
+            "Enter K-Means clusters:",  # 提示信息
+            cluster_options,  # 下拉选项
+            editable=False  # 不可编辑
+        )
+
+        if not ok:  # 用户取消选择
+            return
+
+        # 将用户选择的簇数量转换为整数
+        num_clusters = int(selected_cluster)
+
+        # 执行 K-Means 聚类
+        kmeans = KMeans(n_clusters=num_clusters, random_state=42, n_init=10)
+        cluster_labels = kmeans.fit_predict(data)
+
+        # 进行 PCA 降维
         pca = PCA(n_components=2)
         data_pca = pca.fit_transform(data)
 
         df_pca = np.column_stack((data_pca, cluster_labels))
-        
+
+        # 绘图
         plt.figure(figsize=(10, 8))
         sns.scatterplot(x=df_pca[:, 0], y=df_pca[:, 1], hue=cluster_labels, palette='Set1', s=100, edgecolor='black')
 
         plt.xlabel(f'PC1 ({pca.explained_variance_ratio_[0] * 100:.1f}%)')
         plt.ylabel(f'PC2 ({pca.explained_variance_ratio_[1] * 100:.1f}%)')
-        plt.title("K-Means Clustering with PCA")
+        plt.title(f"K-Means Clustering with PCA (K={num_clusters})")
         plt.legend(title="Cluster")
         plt.show()
 
