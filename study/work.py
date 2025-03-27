@@ -1740,13 +1740,13 @@ class Toolbar:
             # 动态设置主成分数量
             n_components = 8 # 最多取8个成分，可根据需求调整
             self.pls = PLSRegression(n_components=n_components)
-            pls_result = self.pls.fit_transform(data_scaled, labels_scaled)[0]
+            scores = self.pls.fit_transform(data_scaled, labels_scaled)[0]
             
-            # 将PLS得分转为DataFrame并添加标签列
-            pls_df = pd.DataFrame(pls_result, columns=[f"PLS {i+1}" for i in range(n_components)])  # 动态列名
-            pls_df['Label'] = labels.flatten()  # 标签列
-            pls_df['Type'] = 'Score'  # 标识得分矩阵
-            pls_df.index = [f"Sample_{i+1}" for i in range(pls_df.shape[0])]  # 修改行索引
+            # 创建得分矩阵DataFrame
+            scores_df = pd.DataFrame(scores, columns=[f"PLS {i+1}" for i in range(n_components)])
+            scores_df['Label'] = labels
+            scores_df['Type'] = 'Score'
+            scores_df.index = [f"Sample_{i+1}" for i in range(scores_df.shape[0])]
 
             # 获取载荷矩阵
             loadings = self.pls.x_weights_  # PLS载荷矩阵
@@ -1756,22 +1756,86 @@ class Toolbar:
             loadings_df['Label'] = 'N/A'  # 载荷矩阵无标签，填充占位符
 
             # 结果数值四舍五入到4位小数
-            pls_df = pls_df.round(4)
+            scores_df = scores_df.round(4)
             loadings_df = loadings_df.round(4)
 
-            # 合并得分矩阵和载荷矩阵
-            combined_df = pd.concat([pls_df, loadings_df], axis=0)
-            columns = ['Type', 'Label'] + [f"PLS {i+1}" for i in range(n_components)]  # 动态列名
-            combined_df = combined_df[columns]
+            # 得分矩阵显示在 tableWidget_2
+            scores_df = scores_df[['Label', 'Type'] + [f"PLS {i+1}" for i in range(n_components)]]
+            self.display_table(scores_df)
 
-            # 将结果显示在 tableWidget_2 中
-            self.display_table(combined_df)
+            # （2）载荷矩阵显示在弹窗
+            self.show_loadings_popup(loadings_df)
 
             # 绘制 PLS 结果可视化
-            self.visualize_pls_pairplot(pls_df)
+            self.visualize_pls_pairplot(scores_df)
 
         except Exception as e:
             QMessageBox.warning(self.tableWidget, "Error", f"Error: {str(e)}")
+
+    def show_loadings_popup(self, loadings_df):
+        """弹窗显示 PLS 载荷矩阵"""
+        self.loadings_dialog = QDialog(None)  # 让对话框保持在主窗口下，而不是匿名实例
+        self.loadings_dialog.setWindowTitle("PLS Loadings Matrix")
+        layout = QVBoxLayout()
+
+        title_label = QLabel("<b>PLS Loadings Matrix</b>")
+        layout.addWidget(title_label)
+
+        # **调整列顺序，把 'type' 和 'label' 放到最前面**
+        priority_cols = ['Type', 'Label']
+        other_cols = [col for col in loadings_df.columns if col not in priority_cols]
+        ordered_cols = priority_cols + other_cols  # 确保 type 和 label 在前
+
+        loadings_df = loadings_df[ordered_cols]  # 重新排列 DataFrame
+
+        table = QTableWidget()
+        table.setRowCount(loadings_df.shape[0])
+        table.setColumnCount(loadings_df.shape[1])
+        table.setHorizontalHeaderLabels(loadings_df.columns)
+        table.setVerticalHeaderLabels(loadings_df.index)
+
+        for row in range(loadings_df.shape[0]):
+            for col in range(loadings_df.shape[1]):
+                item = QTableWidgetItem(str(loadings_df.iloc[row, col]))
+                item.setTextAlignment(Qt.AlignCenter)
+                table.setItem(row, col, item)
+
+        table.resizeColumnsToContents()
+        table.resizeRowsToContents()
+        layout.addWidget(table)
+
+        save_button = QPushButton("Save")
+        save_button.clicked.connect(lambda: self.save_loadings_matrix(loadings_df))
+        layout.addWidget(save_button)
+
+        self.loadings_dialog.setLayout(layout)
+        self.loadings_dialog.show()
+
+    def save_loadings_matrix(self, loadings_df):
+        """保存 PCA 载荷矩阵到 CSV 或 Excel"""
+        options = QFileDialog.Options()
+        filePath, _ = QFileDialog.getSaveFileName(None, "Save PCA Loadings Matrix", "",
+                                                "CSV Files (*.csv);;Excel Files (*.xlsx)", options=options)
+        if filePath:
+            try:
+                if filePath.endswith('.csv'):
+                    loadings_df.to_csv(filePath, index=True)
+                else:
+                    loadings_df.to_excel(filePath, index=True)
+                QMessageBox.information(None, "Success", "Loadings matrix saved successfully!")
+            except Exception as e:
+                QMessageBox.warning(None, "Error", f"Failed to save file: {str(e)}")
+
+    def display_table(self, df):
+        """将 DataFrame 显示在 tableWidget_2 中"""
+        self.tableWidget_2.setRowCount(df.shape[0])
+        self.tableWidget_2.setColumnCount(df.shape[1])
+        self.tableWidget_2.setHorizontalHeaderLabels(df.columns)
+
+        for i in range(df.shape[0]):
+            for j in range(df.shape[1]):
+                item = QTableWidgetItem(str(df.iat[i, j]))
+                self.tableWidget_2.setItem(i, j, item)
 
     def visualize_pls_pairplot(self, pls_df, explained_variance=None):
         class PLSPlotDialog(QDialog):
